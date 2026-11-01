@@ -38,3 +38,83 @@ General changes first needed here; each applies to every game:
 - [GLSLC outputs in Criterion's Bundle 2 resources](../../../docs/reference/shaders.md#glslc-outputs-in-criterions-bundle-2-resources) (`shader_split.py`)
 - [A texture upgrade while a draw binds its arguments ends the pass](../../../docs/reference/rendering.md#a-texture-upgrade-while-a-draw-binds-its-arguments-ends-the-pass) (`nvn_mtl.m`)
 - `hle_fpslock.c`: frame times in system ticks, frame steps in seconds and a mode switch as frame-limit fields; the profile key `enc_thread`
+
+
+## Internal-resolution experiment: NFS on Mac M6 (2026-11-01, fork only)
+
+The independent branch `codex/nfs-resolution-aa-20261101` starts from upstream
+`dad38db62ef549404b617a73aa18d31aa8117c8e` and reuses
+[PR #405](https://github.com/seedds/nxnative/pull/405), head
+`c07feb3dcdcd12adbc157ab1ab2e070ecde39a6f` by Amost-.
+The one integration conflict retains both main's `att_layers` clear helper and
+#405's `ups_pass` / `ups_rect` helpers. It does not import the separate sampler
+experiment or modify benchmark PR #852. #345 and #335 are not included.
+
+Mac mini Apple M6, 16 GiB, macOS 27.2 (26B123), Xcode 27.2. One normal-clock
+Roadsters Reborn / Boxster route trial per factor, in the order 1, 1.5, 2;
+60 fps target, render scale 1, audio on, windowed, explicit 60 Hz virtual ticks,
+present-time upscaling off, HUD off. Each launch lasts about ten minutes; the
+540-600 s measurement contains no screenshots or pass dumps. A screenshot is
+requested at 600.5 s. Copies of the same private starting save are used and the
+source starting save remains unchanged by SHA-256. The host is rebuilt here;
+the previously verified stock-sampler rewritten modules and matching
+`a7dbbce711c3` game shader libraries are reused, not rebuilt from NSP this round.
+All three runs remain visible, reach the race and exit gracefully.
+
+Times below are milliseconds. These are exploratory observations, not a causal
+performance comparison: normal-clock replay reached different race positions.
+
+| Factor | FPS | Frame P95 | Frame P99 | Frame max | >25 ms | GPU P50 / P95 | Dropped |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1x | 59.9 | 21.42 | 22.08 | 74.39 | 7 | 5.2 / 7.84 | 0 |
+| 1.5x | 59.9 | 21.58 | 22.23 | 64.02 | 10 | 5.12 / 8.69 | 0 |
+| 2x | 59.9 | 21.46 | 21.95 | 78.86 | 6 | 6.16 / 6.84 | 0 |
+
+Allocation logs and original screenshots confirm selected 1920x1080 targets
+become 2880x1620 or 3840x2160. At 2x, pre-window and post-window pass traces
+also contain real 3840x2160 color attachments; square targets remain unscaled.
+No resolution-demotion log was observed. Same-event intro screenshots show no
+obvious missing geometry or UI clipping; race captures contain the car, road,
+shadows and HUD. They do not establish a motion-AA improvement, matched-position
+shadow/reflection correctness, or correctness of every render pass. Mirror
+fine-line patterns remain a visual-review limitation.
+
+System GPU utilization medians in the window are 46 / 44 / 45 percent (29 / 30 /
+29 samples, about every two seconds); this includes desktop work. Process RSS
+window medians are 0.8333 / 0.8464 / 0.8827 GiB. RSS is not the full unified-memory
+footprint; system GPU allocations must not be added to it as independent memory.
+No thermal/performance warning was reported by `pmset -g therm`, and sampled
+swap use stayed 218.31 MiB. Temperatures and watts were not measured. This is
+not a sustained thermal or long-duration stability certification. Audio callback
+logs have no reported retry/loss or nonzero underrun; audible quality was not
+independently assessed.
+
+Validation: host build succeeds; `t_ups` has zero failures; `t_nvn` 218 checks,
+`t_clear_ds` 48 checks, zero failures; launcher/settings/environment tests 17
+and docs tests 11 pass. Host MSL generation fell back to embedded source in this
+build, and deswizzle/present libraries compiled at startup before the window;
+compiler warnings remain. The 1.5x post-window diagnostic mistakenly used
+`passes 1`, rejected as an unknown key; it was corrected to `passdump 1` for 2x.
+Thus 1.5x has allocation/screenshot evidence but no accepted pass trace in this
+trial. No timing rows were discarded. The regression harness command
+`scripts/regress.py check --games 010029B0118E8000 --quick` stops because its
+root/games directories are not configured. Only NFS is installed here; no
+cross-game regression, complete graphics suite, or lint-ratchet pass is claimed.
+This remains an experimental fork, not an upstream-ready replacement for #405.
+
+AA audit: one prior NFS race trace contains 529 single-sample pipelines; local
+shader metadata also names `DriveableSurfaceAntialiasControl`. Neither proves
+the complete native post-processing AA path. No verified FXAA/SMAA/TAA path or
+usable temporal-input contract is established. This #405 tip excludes multisample
+targets from scaling. The current present shader takes one bilinear sample, so
+higher internal resolution is not a validated complete SSAA resolve. Sharpening
+and spatial MetalFX reconstruction are not counted as AA. No new AA is added;
+whole-scene edge quality and motion shimmer remain open, with #345's output
+filtering a separate candidate for evaluation.
+
+An independent read-only integration review found no merge-specific blocker.
+It flagged an inherited #405 caveat: `ups_demote_pass` considers configured
+attachments before `clear_only` / `g_geo_omit_colors` filters, potentially demoting
+an unused scaled target. This was not demonstrated on NFS and is not patched here.
+Raw game files, shaders, saves, logs and screenshots stay local; only source,
+synthetic tests and this sanitized note belong in the fork.
