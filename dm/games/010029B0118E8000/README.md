@@ -38,3 +38,41 @@ General changes first needed here; each applies to every game:
 - [GLSLC outputs in Criterion's Bundle 2 resources](../../../docs/reference/shaders.md#glslc-outputs-in-criterions-bundle-2-resources) (`shader_split.py`)
 - [A texture upgrade while a draw binds its arguments ends the pass](../../../docs/reference/rendering.md#a-texture-upgrade-while-a-draw-binds-its-arguments-ends-the-pass) (`nvn_mtl.m`)
 - `hle_fpslock.c`: frame times in system ticks, frame steps in seconds and a mode switch as frame-limit fields; the profile key `enc_thread`
+
+## Experimental sampler quality (fork branch only; **not validated**)
+
+The separate experimental branch `codex/nfs-graphics-experimental-20261101`
+adds an **off-by-default build-time test** of NFS 1.0.3's texture sampler
+parameters. In a terminal, set `DM_NFS_SAMPLER_QUALITY=1` for the
+`scripts/build_ipa_from_nsp.py` build on this branch. Unset the variable or
+set it to `0` and rebuild to restore the stock sampler instructions.
+The build script's rewrite-cache fingerprint includes this variable so that
+toggling it does not silently reuse a previously rewritten NSO.
+
+- `main+0x7eff80`: change a load to a constant texture mip LOD bias of
+  `-0.375`, which *may* favor sharper mip levels at distance.
+- `main+0x7effc0`: change the computed maximum anisotropy to `8.0`.
+- Both modifications are restricted to the registered 1.0.3 NSO build
+  `799d1061182c1302e08e706b84ce76e5`; they check the original
+  instruction bytes before rewriting and abort on a mismatch.
+- The original instruction encodings were reconstructed from published
+  assembly comments; **the original NFS NSO has not been inspected in this
+  branch**. A successful build, visual change, FPS effect, and stability
+  improvement have **not** yet been demonstrated.
+- This changes filtering and mip selection, **not the source texture
+  resolution**, scene-object LOD, shadow maps, or anti-aliasing. It does not
+  bundle any copyrighted assets or encryption keys.
+- The original game-specific 60 fps implementation is left unchanged.
+
+**Credits and prior work:** community [1.0.3 pchtxt](https://github.com/cucholix/NX-IPS-romfs-compilation/blob/main/N/Need%20for%20Speed%20Hot%20Pursuit%20Remastered/1.0.3.pchtxt).
+For more general solutions, see nxnative [sampler controls #335](https://github.com/seedds/nxnative/pull/335),
+[internal resolution scaling #405](https://github.com/seedds/nxnative/pull/405), and
+[presentation sharpening #345](https://github.com/seedds/nxnative/pull/345).
+These are separate in-review contributions; none is included here.
+
+**Validation needed before requesting upstream review:** compare original NSO
+bytes and generated `main.cuts.tsv`; build NFS 1.0.3 both with and without
+the flag; compare the same image area (road, walls, fences and cars), FPS,
+frame-time percentiles, GPU time, artifacting and stability. Test both
+console modes without changing any game assets. Never commit game files,
+original NSOs, RomFS, keys, extracted shaders or user saves.
