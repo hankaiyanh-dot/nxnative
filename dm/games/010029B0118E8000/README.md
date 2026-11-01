@@ -76,3 +76,25 @@ the flag; compare the same image area (road, walls, fences and cars), FPS,
 frame-time percentiles, GPU time, artifacting and stability. Test both
 console modes without changing any game assets. Never commit game files,
 original NSOs, RomFS, keys, extracted shaders or user saves.
+
+### Texture detail and anti-aliasing roadmap (not implemented)
+
+The sampler experiment above is **not an HD texture pack**: it can select
+existing mip levels differently but cannot manufacture missing texture detail.
+Higher-resolution source textures would require a separately verified, legally
+redistributable asset pipeline. No texture assets are distributed here.
+
+Anti-aliasing is also **not implemented by this experiment**. MetalFX
+presentation upscaling and sharpening are not equivalent to verified
+per-game FXAA, SMAA or temporal anti-aliasing (TAA). First test the
+existing native game image for jagged edges and temporal shimmering;
+then evaluate nxnative internal-resolution supersampling (#405) for
+edge quality and cost. Any post-processing AA needs a separate,
+reversible implementation, with explicit UI/HUD and motion-artifact
+checks. TAA requires game-appropriate temporal inputs and cannot be
+assumed available from a final presentation image.
+
+The acceptance conditions for future changes are a verified picture
+difference, no new missing surfaces or crashes, stable game simulation,
+and frame-time / GPU-time comparisons against a capture-free baseline.
+Keep each rendering feature and each verified bug fix in its own PR.
