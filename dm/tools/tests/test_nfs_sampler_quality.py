@@ -36,8 +36,8 @@ class NFSSamplerQualityTests(unittest.TestCase):
         self.assertEqual(
             [(off, before, after) for off, before, after, _ in enabled[1:]],
             [
-                (0x7EFF80, "c01240bd", "00103b1e"),
-                (0x7EFFC0, "0001231e", "0010241e"),
+                (0x7EFE80, "c01240bd", "00103b1e"),
+                (0x7EFEC0, "0001231e", "0010241e"),
             ],
         )
         for _, before, after, _ in enabled:

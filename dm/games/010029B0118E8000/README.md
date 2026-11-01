@@ -39,7 +39,7 @@ General changes first needed here; each applies to every game:
 - [A texture upgrade while a draw binds its arguments ends the pass](../../../docs/reference/rendering.md#a-texture-upgrade-while-a-draw-binds-its-arguments-ends-the-pass) (`nvn_mtl.m`)
 - `hle_fpslock.c`: frame times in system ticks, frame steps in seconds and a mode switch as frame-limit fields; the profile key `enc_thread`
 
-## Experimental sampler quality (fork branch only; **not validated**)
+## Experimental sampler quality (fork branch only; **acceptance incomplete**)
 
 The separate experimental branch `codex/nfs-graphics-experimental-20261101`
 adds an **off-by-default build-time test** of NFS 1.0.3's texture sampler
@@ -49,16 +49,19 @@ set it to `0` and rebuild to restore the stock sampler instructions.
 The build script's rewrite-cache fingerprint includes this variable so that
 toggling it does not silently reuse a previously rewritten NSO.
 
-- `main+0x7eff80`: change a load to a constant texture mip LOD bias of
+- `main+0x7efe80`: change a load to a constant texture mip LOD bias of
   `-0.375`, which *may* favor sharper mip levels at distance.
-- `main+0x7effc0`: change the computed maximum anisotropy to `8.0`.
+- `main+0x7efec0`: change the computed maximum anisotropy to `8.0`.
 - Both modifications are restricted to the registered 1.0.3 NSO build
   `799d1061182c1302e08e706b84ce76e5`; they check the original
   instruction bytes before rewriting and abort on a mismatch.
-- The original instruction encodings were reconstructed from published
-  assembly comments; **the original NFS NSO has not been inspected in this
-  branch**. A successful build, visual change, FPS effect, and stability
-  improvement have **not** yet been demonstrated.
+- The original instructions were checked against the locally owned retail
+  1.0.3 NSO on 2026-11-01 using the hash-validating module loader and
+  Capstone disassembly. The published pchtxt offsets include a `0x100` NSO
+  header; the rewriter uses loaded memory offsets. The earlier offsets
+  correctly failed the original-byte assertion. Both corrected variants
+  now rewrite successfully; their images differ only at the two intended
+  instructions. Runtime acceptance remains separate from this byte check.
 - This changes filtering and mip selection, **not the source texture
   resolution**, scene-object LOD, shadow maps, or anti-aliasing. It does not
   bundle any copyrighted assets or encryption keys.
@@ -70,12 +73,107 @@ For more general solutions, see nxnative [sampler controls #335](https://github.
 [presentation sharpening #345](https://github.com/seedds/nxnative/pull/345).
 These are separate in-review contributions; none is included here.
 
-**Validation needed before requesting upstream review:** compare original NSO
-bytes and generated `main.cuts.tsv`; build NFS 1.0.3 both with and without
-the flag; compare the same image area (road, walls, fences and cars), FPS,
+**Validation needed before requesting upstream review:** complete repeated
+in-game runs of both variants; compare the same image area (road, walls, fences and cars), FPS,
 frame-time percentiles, GPU time, artifacting and stability. Test both
 console modes without changing any game assets. Never commit game files,
 original NSOs, RomFS, keys, extracted shaders or user saves.
+
+### Local verification on 2026-11-01
+
+The local retail NSO passed the loader's segment hashes and matched the
+registered build. Capstone confirmed `c01240bd` (`ldr s0,[x22,#0x10]`) at
+`0x7efe80` and `0001231e` (`ucvtf s0,w8`) at `0x7efec0`. The previous
+`0x7eff80`/`0x7effc0` offsets are not these instructions; the original-byte
+assertion rejected them before output was written. The corrected enabled
+and disabled images have equal size and differ only in the two intended
+instruction words. The independent frame-limiter cut is unchanged.
+
+The original three sampler unit tests pass. The sampler, patch registry,
+documentation and environment-switch checks pass together (31 tests).
+A real build-script rewrite sequence `0 -> 1 -> 0` produced cut counts
+`1 -> 3 -> 1`; its disabled cache keys matched and its enabled key differed.
+The Python lint ratchet reports zero new findings. Full tool-test discovery
+still has unrelated Mac icon-fixture setup failure and one short synthetic
+benchmark failure; this is not a claim that the complete suite is green.
+
+Xcode 27.2 (27B52) was installed alongside 27.1 on the development drive;
+Apple signature and system trust checks passed. Metal 32023.922
+(`metalfe-32023.922.4`) matches `dmsh_chain.lock`. The full Mac build produced
+all 2,154 shader libraries for chain `a7dbbce711c3`, then the host and the
+pipeline prebuild. Both flag values built through the normal NSP script.
+The preserved original build and save were not used as build outputs.
+On this Mac, Swift traps with this development environment's Unicode `TMPDIR`;
+an ASCII temporary folder on the same drive avoids that compiler issue.
+
+The first gameplay pair reused the older matching host and shader cache.
+It is **invalid for a sampler performance comparison**: the disabled run
+used roughly 72 Hz acquires without virtual ticks on the 144 Hz screen,
+while the enabled run used the intended 60 Hz virtual ticks. The disabled
+run repeatedly accumulated seconds of pacing debt, including a 21.733 s
+frame ending at 546.413 s. The 540-600 s selector includes frames by their
+ending timestamp, so that frame also spans time before the window. Do not
+remove it and present the remaining rows as a quality/performance gain.
+Both variants did reach a race and exit gracefully with the same three
+known red lines. Their screenshots are at different track positions.
+
+The controlled rerun uses one frozen, newly built host, matching shaders,
+separate starting-save copies and explicit `DM_LINK_VTICK=1`,
+`DM_PRESENT_LINK=1`, `DM_PRESENT_HZ=60`, target 60 fps and scale 1.
+Screenshot and sampler-state requests are after the 540-600 s measurement
+window. GPU utilization is sampled from the system once per second; it
+includes other desktop work and is separate from per-frame GPU duration.
+Normal guest time and frame-stamped input can still yield different race
+positions, so isolated matching scene captures and repeated trials remain
+necessary before claiming a texture-detail improvement or a performance
+change. Raw logs, screenshots, NSOs and saves stay local.
+
+### Runtime sampler confirmation and capture limits
+
+A one-frame pass trace after the measurement window confirms that the
+experiment reaches real bound samplers: stock captured bindings include
+`bias=0/-0.9/-0.45, aniso=1`; enabled captured bindings use
+`bias=-0.375, aniso=8`. These are binding records, not a count of unique
+samplers. A fixed bias is not an increase in detail for every material:
+stock samplers with a more negative bias can select differently in the
+opposite direction. The experiment does not provide an anisotropy floor;
+it replaces the game's computed value with 8.
+
+The first new-stack pair was also rejected for comparison after visibility
+analysis: the enabled window entered fullscreen and became covered at
+about 330 s, after which its frames were discarded and the requested PNG
+never completed. The disabled run also had an earlier covered interval.
+`DM_WINDOW_TOP=1` does not make a floating window visible in every macOS
+Space. A fixed-window rerun therefore also sets `DM_FULLSCREEN=0` and
+checks the visibility log, actual presented-frame rows and the PNG.
+The user restored the game to the current desktop before valid captures.
+Do not interpret the covered-window 23-25 fps fallback rows as the cost of
+anisotropic filtering. Failed attempts remain in the private evidence.
+
+### Fixed-window exploratory pair
+
+Both selected runs remained visible and exited gracefully: enabled first,
+then a disabled recheck, one approximately ten-minute launch each. The
+window is 540-600 s, target 60 fps, scale 1, audio on; the same host SHA-256
+`2706c4157de4079dc08e5abbb5301f581fd5ea626b655b9d1b3a695f455fd809`
+and chain `a7dbbce711c3` were used. No capture is inside that window.
+
+| Variant | FPS | Frame P95 | Frame P99 | Frame max | >25 ms | Dropped | GPU P50 | GPU P95 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| disabled | 59.9 | 21.12 | 21.28 | 102.06 | 9 | 0 | 5.22 | 7.8 |
+| enabled | 59.9 | 16.95 | 17.21 | 66.94 | 6 | 0 | 4.94 | 5.59 |
+
+Times are milliseconds. This is an exploratory pair, not evidence of a
+performance improvement: the normal-clock input replay reached different
+positions and camera directions. The disabled screenshot shows 5.9 miles
+remaining at race time 1:35.20; the enabled one shows 6.5 miles at 1:21.33.
+System GPU utilization medians were 53.0% disabled and 44.0% enabled;
+these include other desktop work. Both had the three known graphics/device
+red lines. Enabled also had three brief audio callback-loss/retry reports,
+with callbacks later resuming: audio continuity is not fully validated.
+Neither run logged a crash. The capture shows rendered cars, road and
+vegetation; it does not establish a matched-pixel texture gain or reduced
+motion shimmer. Source and start saves remained unchanged by hash comparison.
 
 ### Texture detail and anti-aliasing roadmap (not implemented)
 
