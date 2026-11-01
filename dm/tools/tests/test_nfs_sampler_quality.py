@@ -10,9 +10,9 @@ import unittest
 from unittest.mock import patch
 
 
-ROOT = Path(__file__).resolve().parents[2]
-PROFILE = ROOT / "games" / "010029B0118E8000" / "patches.py"
-SCRIPT = ROOT.parent / "scripts" / "build_ipa_from_nsp.py"
+ROOT = Path(__file__).resolve().parents[3]
+PROFILE = ROOT / "dm" / "games" / "010029B0118E8000" / "patches.py"
+SCRIPT = ROOT / "scripts" / "build_ipa_from_nsp.py"
 BUILD = "799d1061182c1302e08e706b84ce76e5"
 
 
