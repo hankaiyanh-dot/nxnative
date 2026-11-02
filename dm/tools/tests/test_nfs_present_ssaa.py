@@ -10,6 +10,7 @@ import unittest
 
 
 PRESENT = Path(__file__).resolve().parents[2] / "gfx" / "msl" / "present.metal"
+HOST = Path(__file__).resolve().parents[2] / "gfx" / "nvn" / "nvn_mtl.m"
 
 
 def reference_taps(source_texels_per_screen_pixel):
@@ -38,6 +39,29 @@ class PresentResolveTests(unittest.TestCase):
             taps = reference_taps(f)
             self.assertLessEqual(len(taps), 4)
             self.assertAlmostEqual(sum(taps), 0.0)
+
+    def test_original_bilinear_and_experimental_entrypoints_are_distinct(self):
+        source = PRESENT.read_text(encoding="utf-8")
+        self.assertEqual(source.count("fragment float4 fs("), 1)
+        self.assertEqual(source.count("fragment float4 fsaa("), 1)
+        stock = source.split("fragment float4 fs(", 1)[1].split(
+            "fragment float4 fsaa(", 1
+        )[0]
+        self.assertIn("return t.sample(s, clamp(", stock)
+        self.assertNotIn("footprint", stock)
+
+    def test_opt_in_host_control_and_both_present_paths(self):
+        host = HOST.read_text(encoding="utf-8")
+        self.assertIn('getenv("DM_PRESENT_SSAA")', host)
+        self.assertIn('strcmp(e, "1") == 0', host)
+        self.assertIn('newFunctionWithName:@"fsaa"', host)
+        self.assertIn('newFunctionWithName:@"fs"', host)
+        # Legacy and Metal 4 paths must choose the SAME fallback.
+        self.assertEqual(
+            host.count("setRenderPipelineState:(g_ssaa_pso ? g_ssaa_pso : g_blit_pso)"),
+            2,
+        )
+        self.assertIn("g_ssaa_pso = nil;", host)
 
     def test_crop_abi_and_fallback_still_present(self):
         source = PRESENT.read_text(encoding="utf-8")
