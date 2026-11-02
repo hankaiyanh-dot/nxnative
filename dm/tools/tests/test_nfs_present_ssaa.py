@@ -13,10 +13,10 @@ PRESENT = Path(__file__).resolve().parents[2] / "gfx" / "msl" / "present.metal"
 HOST = Path(__file__).resolve().parents[2] / "gfx" / "nvn" / "nvn_mtl.m"
 
 
-def reference_taps(source_texels_per_screen_pixel):
-    """Mirror the Metal fragment's bounded box sampling axis."""
+def reference_taps(source_texels_per_screen_pixel, other_axis=None):
+    """The bounded grid; the activation threshold is shared by both axes."""
     f = source_texels_per_screen_pixel
-    if f <= 1.25:
+    if max(f, f if other_axis is None else other_axis) <= 1.25:
         return [0.0]
     n = max(1, min(math.ceil(f), 4))
     return [((i + 0.5) / n - 0.5) * f for i in range(n)]
@@ -33,6 +33,11 @@ class PresentResolveTests(unittest.TestCase):
     def test_fractional_shrink_is_symmetric(self):
         self.assertEqual(reference_taps(1.5), [-0.375, 0.375])
         self.assertAlmostEqual(sum(reference_taps(2.25)), 0)
+
+    def test_asymmetric_threshold_uses_both_axes(self):
+        self.assertEqual(reference_taps(1.2, 2.0), [-0.3, 0.3])
+        self.assertEqual(reference_taps(2.0, 1.2), [-0.5, 0.5])
+        self.assertEqual(reference_taps(0.5, 2.0), [0.0])
 
     def test_bounded_filter_cost(self):
         for f in (1, 1.5, 2, 3, 4, 8, 100):
@@ -66,7 +71,10 @@ class PresentResolveTests(unittest.TestCase):
     def test_crop_abi_and_fallback_still_present(self):
         source = PRESENT.read_text(encoding="utf-8")
         self.assertIn("struct Crop { float4 rect; float4 edge; };", source)
-        self.assertIn("if (max(footprint.x, footprint.y) <= 1.25f)", source)
+        self.assertIn("constant float4& resolve [[buffer(1)]]", source)
+        self.assertNotIn("dfdx(", source)
+        self.assertNotIn("dfdy(", source)
+        self.assertIn("if (nx == 1 && ny == 1)", source)
         self.assertIn("return t.sample(s, edge_uv)", source)
         self.assertIn("clamp(uv + position * footprint * texel, c.edge.xy, c.edge.zw)", source)
 

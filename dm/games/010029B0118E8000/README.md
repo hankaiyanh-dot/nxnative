@@ -177,3 +177,59 @@ proposing an upstream change.
 **Never present this source-only switch as an M6-tested AA improvement.**
 The first-stage sampler branch and the draft benchmark PR #852 remain
 separate and untouched.
+
+## M6 native validation of the toggle branch (2026-11-02, experimental)
+
+The unchanged toggle tip `44600758` compiled, but failed the first real
+Metal reduction test: 6 of 59 checks failed with SSAA enabled, on both
+legacy and Metal 4 paths. The disabled paths passed. GPU instrumentation
+showed nominal 2:1 footprints selecting (2,3)/(3,3) taps and nominal 3:1
+selecting (3,4)/(4,4): floating-point UV derivatives crossed `ceil` boundaries.
+The 4-tap cap hid the same problem at 4:1.
+
+This validation branch fixes the cause by deriving footprint and integer
+tap counts from actual crop and picture viewport dimensions on the host,
+in double precision. The original 32-byte Crop at buffer(0) remains;
+SSAA reads a separate 16-byte buffer(1). Legacy and M4 share the helper;
+M4 computes after optional MetalFX reconstruction. Normal and offscreen
+allocations, argument-table capacity and residency cover both buffers.
+Default bilinear, opt-in semantics and missing-fragment/PSO-failure fallback
+remain. The fallback does not cover an invalid whole library or GPU error.
+
+The rebuilt host uses Xcode 27.2 / Metal 32023.922, with 13 precompiled
+host libraries and the existing verified game shader chain `a7dbbce711c3`.
+The new asset-free `t_present_ssaa_toggle` exercises production encoders.
+Six separate processes (unset, 0, 1, invalid, missing fsaa and failed PSO)
+pass 133 checks each; off/on also pass with the Metal validation layer
+enabled. Existing crop tests pass 88 checks with each toggle.
+The Makefile check target runs the six modes automatically. Tests cover
+integer impulse means, crop, raw sRGB, alpha, Y flip, bounded grids and
+true near-integer/asymmetric host ratios. Fractional 1.5/2.25 reductions
+are compared with an independent area oracle and remain approximations.
+The CPU reference now uses the shared two-axis threshold. Twenty focused
+Python tests pass; the Python lint ratchet has 391 baseline findings and
+zero new or stale findings. C lint was not run: clang-tidy is unavailable.
+
+A private sequence of 24 unchanged 3840x2160 source PNGs was sent through
+the actual offscreen encoders with SSAA off/on at 2:1 and 3:1. At 3:1,
+all on outputs match the independent 3x3 encoded-byte area mean to within
+0.445 of a byte; at 2:1 the paths differ by at most one byte, as expected
+for an aligned 2x2 reduction. Disabled output matches the frozen original
+bilinear shader byte-for-byte in all 24 3:1 comparisons and the 2:1
+control. This establishes identical-source spatial resolve behavior, not
+perceptual quality, linear-light reconstruction or temporal AA. The old
+source sequence itself has screenshot/readback perturbation and cannot
+prove normal-cadence motion shimmer.
+
+Live game performance remains unaccepted. The first 2x/off launch reached
+the race and exited normally with the two known device-query messages,
+but all 1,800 presents in the 350-380 s window were discarded while the
+Mac screen was locked. Its nominal 60 fps is not a displayed-frame result.
+The harness rejected it and stopped before 2x/on. A fresh visible-window
+pair is required after the user unlocks the Mac. No six-cell game matrix,
+long driving/thermal trial or cross-game runtime regression is claimed.
+Only NFS is locally installed; the existing harness setup is incomplete.
+
+Original sampler, resolution, integrated, prototype and toggle branches,
+original saves and benchmark Draft PR #852 are preserved. Raw PNGs, logs,
+keys and game files stay private. This remains an experimental fork.

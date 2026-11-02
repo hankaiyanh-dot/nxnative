@@ -8,8 +8,9 @@ struct Crop { float4 rect; float4 edge; };
 // crop ABI (eight floats) and single-sample present are unchanged. Unlike
 // sharpening or MetalFX reconstruction, this averages multiple positions in
 // a genuinely larger source image before displaying it at a smaller size.
-// The pixel footprint is derived from fragment UV derivatives; no host
-// arguments, game patches or copyrighted assets are required.
+// The host supplies the footprint and tap counts from the actual source crop
+// and picture viewport. UV derivatives vary slightly across quads: ceil() on
+// those values incorrectly selected 3/4 taps at integer 2:1/3:1 reductions.
 //
 // This is a spatial box resolve, NOT FXAA/SMAA/TAA. It does not create samples
 // where the game did not render them, or fix motion shimmer on its own.
@@ -24,15 +25,14 @@ fragment float4 fs(V in [[stage_in]], texture2d<float> t [[texture(0)]], sampler
 }
 
 // Experimental multi-tap downsample: selected only through DM_PRESENT_SSAA=1.
-fragment float4 fsaa(V in [[stage_in]], texture2d<float> t [[texture(0)]], sampler s [[sampler(0)]], constant Crop& c [[buffer(0)]]) {
+fragment float4 fsaa(V in [[stage_in]], texture2d<float> t [[texture(0)]], sampler s [[sampler(0)]], constant Crop& c [[buffer(0)]], constant float4& resolve [[buffer(1)]]) {
   float2 uv = in.uv * c.rect.zw + c.rect.xy;
   float2 edge_uv = clamp(uv, c.edge.xy, c.edge.zw);
   float2 size = float2(float(t.get_width()), float(t.get_height()));
   float2 texel = 1.0f / size;
-  float2 footprint = abs(float2(dfdx(uv.x), dfdy(uv.y))) * size;
-  if (max(footprint.x, footprint.y) <= 1.25f) return t.sample(s, edge_uv);
-  int nx = clamp(int(ceil(footprint.x)), 1, 4);
-  int ny = clamp(int(ceil(footprint.y)), 1, 4);
+  float2 footprint = resolve.xy;
+  int nx = int(resolve.z), ny = int(resolve.w);
+  if (nx == 1 && ny == 1) return t.sample(s, edge_uv);
   float4 sum = float4(0.0f);
   for (int y = 0; y < ny; ++y) for (int x = 0; x < nx; ++x) {
     float2 position = float2((float(x) + 0.5f) / float(nx) - 0.5f,
