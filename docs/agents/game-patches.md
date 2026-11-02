@@ -385,7 +385,7 @@ Every patch bound tighter than it could be: the open gaps, then the blocked, kep
 - **`build` → `game`**, frame rate, gap, judgement: frame limiter spin: its branch back cut. The engine's own spin limiter; a function-matched rule could carry it over the game's updates
 - **`build` → `engine`**, frame rate, blocked: one game on that engine here, judgement: Criterion's 60 fps mode, frame ticks and game step at fixed addresses. The studio's engine, which its other games ship
 
-- **1.0.3 `main`** `799d1061…` ([patches.py:7](../../dm/games/010029B0118E8000/patches.py#L7))
+- **1.0.3 `main`** `799d1061…` ([patches.py:15](../../dm/games/010029B0118E8000/patches.py#L15))
   - cut `+0x4835a4`: frame limiter spin: b.gt main+0x483588 → nop (the host paces the frames)
   - host [hle_fpslock.c:41](../../dm/host/hle_fpslock.c#L41): engine frame limit set to fps_target: Criterion 60 fps mode
   - host [hle_fpslock.c:42](../../dm/host/hle_fpslock.c#L42): engine frame limit set to fps_target: Criterion frame ticks

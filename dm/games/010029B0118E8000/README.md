@@ -47,8 +47,9 @@ The independent branch `codex/nfs-resolution-aa-20261101` starts from upstream
 [PR #405](https://github.com/seedds/nxnative/pull/405), head
 `c07feb3dcdcd12adbc157ab1ab2e070ecde39a6f` by Amost-.
 The one integration conflict retains both main's `att_layers` clear helper and
-#405's `ups_pass` / `ups_rect` helpers. It does not import the separate sampler
-experiment or modify benchmark PR #852. #345 and #335 are not included.
+#405's `ups_pass` / `ups_rect` helpers. That isolated stage did not import
+the sampler experiment or modify benchmark PR #852. The integration below
+adds the sampler switch separately; #345 and #335 remain excluded.
 
 Mac mini Apple M6, 16 GiB, macOS 27.2 (26B123), Xcode 27.2. One normal-clock
 Roadsters Reborn / Boxster route trial per factor, in the order 1, 1.5, 2;
@@ -118,3 +119,133 @@ attachments before `clear_only` / `g_geo_omit_colors` filters, potentially demot
 an unused scaled target. This was not demonstrated on NFS and is not patched here.
 Raw game files, shaders, saves, logs and screenshots stay local; only source,
 synthetic tests and this sanitized note belong in the fork.
+
+## Experimental sampler quality (opt-in fork experiment)
+
+The first-stage branch `codex/nfs-graphics-experimental-20261101` introduced
+the **off-by-default build-time test** of NFS 1.0.3's texture sampler
+parameters. In a terminal, set `DM_NFS_SAMPLER_QUALITY=1` for the
+`scripts/build_ipa_from_nsp.py` build on this branch. Unset the variable or
+set it to `0` and rebuild to restore the stock sampler instructions.
+The build script's rewrite-cache fingerprint includes this variable so that
+toggling it does not silently reuse a previously rewritten NSO.
+
+- `main+0x7efe80`: change a load to a constant texture mip LOD bias of
+  `-0.375`, which *may* favor sharper mip levels at distance.
+- `main+0x7efec0`: change the computed maximum anisotropy to `8.0`.
+- Both modifications are restricted to the registered 1.0.3 NSO build
+  `799d1061182c1302e08e706b84ce76e5`; they check the original
+  instruction bytes before rewriting and abort on a mismatch.
+- The original instructions were checked against the locally owned retail
+  1.0.3 NSO on 2026-11-01 using the hash-validating module loader and
+  Capstone disassembly. The published pchtxt offsets include a `0x100` NSO
+  header; the rewriter uses loaded memory offsets. The earlier offsets
+  correctly failed the original-byte assertion. Both corrected variants
+  now rewrite successfully; their images differ only at the two intended
+  instructions. Runtime acceptance remains separate from this byte check.
+- This changes filtering and mip selection, **not the source texture
+  resolution**, scene-object LOD, shadow maps, or anti-aliasing. It does not
+  bundle any copyrighted assets or encryption keys.
+- The original game-specific 60 fps implementation is left unchanged.
+
+**Credits and prior work:** community [1.0.3 pchtxt](https://github.com/cucholix/NX-IPS-romfs-compilation/blob/main/N/Need%20for%20Speed%20Hot%20Pursuit%20Remastered/1.0.3.pchtxt).
+For more general solutions, see nxnative [sampler controls #335](https://github.com/seedds/nxnative/pull/335),
+[internal resolution scaling #405](https://github.com/seedds/nxnative/pull/405), and
+[presentation sharpening #345](https://github.com/seedds/nxnative/pull/345).
+The resolution implementation from #405 is included by the second-stage
+integration above. The general controls from #335 and the presentation
+changes from #345 are not included in this integration.
+
+**Validation needed before requesting upstream review:** complete repeated
+in-game runs of both variants; compare the same image area (road, walls, fences and cars), FPS,
+frame-time percentiles, GPU time, artifacting and stability. Test both
+console modes without changing any game assets. Never commit game files,
+original NSOs, RomFS, keys, extracted shaders or user saves.
+
+The isolated sampler validation and its limitations are recorded in
+[the first-stage source note](https://github.com/hankaiyanh-dot/nxnative/blob/86d9ac6b2820ab2765d3b3ab754f8937f8ace3a5/dm/games/010029B0118E8000/README.md#local-verification-on-2026-11-01).
+The integration branch combines this build-time switch with the resolution
+control above. The combined validation is recorded below.
+
+## Integrated sampler and resolution trial (2026-11-02, experimental fork)
+
+Branch `codex/nfs-integrated-graphics-20261102` starts from published
+resolution commit `f0b5cb32d6c1bedd6e2cac418256f4d9b098f088` and ports only
+the sampler profile, synthetic tests, rewrite cache key and documentation
+from `86d9ac6b2820ab2765d3b3ab754f8937f8ace3a5`. Defaults remain stock
+samplers and 1x resolution. Both original branches and benchmark PR #852
+are unchanged. The uncommitted phase-three presentation-filter work stays
+in its separate checkout; it is not part of this trial.
+
+The clean integration host was rebuilt using Xcode 27.2 and Metal
+32023.922 (`metalfe-32023.922.4`), including 13 precompiled host Metal
+libraries. Game libraries reuse the verified `a7dbbce711c3` chain and
+`7f44b09e6198` inputs with authentic matching companion tables; no stamp
+was edited. Original NSO segment hashes and instruction words were
+rechecked. The real build-script rewrite `0 -> 1 -> 0` gives 1/3/1 cuts,
+matching disabled cache keys and modules, a distinct enabled key, and
+only the two intended sampler instruction words differing. Source game
+modules and original/starting saves remain unchanged.
+
+For a static comparison, retain only the existing route's first eleven
+menu inputs, ending at `f19404:A~f12`, and omit all driving inputs. The
+final captures show zero speed at the Grand Ocean Road start area,
+8.4 miles remaining. One run each, stock1 then sampler1 then combined2;
+target 60 fps, scale 1, audio on, normal guest clock, windowed and visible,
+explicit 60 Hz virtual ticks, HUD/MetalFX/sharpening off. The 350-380 s
+window has no screenshots or dumps. A preview is at 338 s; final captures
+are at 382/384/386 s and a sampler/pass trace is after 387 s.
+`DM_NVN_SHOT_OUT=1280x720` captures the actual presentation filter at a
+fixed size matching the drawable, rather than the pre-filter source.
+
+| Variant | FPS | Frame P95 | Frame P99 | Frame max | Frame >25 ms | GPU P50/P95 | System GPU median % | Shown >25 ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| stock1 | 60.0 | 21.85 | 22.23 | 22.69 | 0 | 4.93/7.04 | 52 | 45 |
+| sampler1 | 60.0 | 21.91 | 22.2 | 50.51 | 1 | 5.0/7.17 | 52 | 63 |
+| combined2 | 60.0 | 21.53 | 21.86 | 22.59 | 0 | 7.65/8.67 | 60.0 | 41 |
+
+Times are milliseconds. All three exit gracefully, with zero discarded
+present rows and the same two known unknown-device-item messages
+(0x60/0x61). Positive shown intervals include 27.8 ms intervals on the
+144 Hz display: zero discarded presents does not mean uniform display
+pacing. No timing row is removed. System GPU samples are restricted to
+the timing window and include other desktop work. One stationary trial
+per variant does not establish a performance gain or a driving workload
+cost; no interleaved repetition, long thermal trial or audible-audio
+verification is claimed.
+
+Runtime binding records confirm stock bias 0/-0.9/-0.45 with aniso 1,
+and enhanced bias -0.375/aniso 8, including combined2. The combined
+race pass uses 3840x2160 attachments while the output remains 1280x720.
+Visual checks accept an approximately matching stationary start-line view.
+The combined early preview shows 5 mph before settling; final selected pole
+dark-core centers differ by at most 0.22 pixels from stock1. This neither
+proves final displacement nor locks the exact pose. Race clocks differ by
+about 1.7 seconds. Final sequences retain their geometry, but reflections,
+lighting, tail lamps and HUD time animate. This is a visual-integrity
+comparison, not identical simulation inputs or a causal image-quality test.
+Road filtering changes are visible; fixed bias is not sharper for every
+material, and residual fine-wire/edge aliasing remains. No texture pack,
+shadow or object-LOD change is added, and there is no motion-AA claim.
+
+A compressed-menu pilot stayed at the map and was rejected, including
+all its timing. That first fresh-worktree build used runtime host-shader
+compilation and lacked companion tables; the accepted runs use the
+precompiled host and authentic matching tables above.
+
+Checks: 47 sampler/registry/docs/environment/launcher tests pass; Python
+lint has 391 baseline findings, zero new or stale findings. `t_ups` has
+zero failures; `t_nvn` 218, `t_clear_ds` 48 and `t_present_crop` 88 checks
+pass. No shader translator or broad host-source change is added to the
+resolution base; earlier cross-game/harness limits still apply. No full
+Python or cross-game regression pass is claimed.
+
+Next AA experiment: evaluate the already isolated #345-derived box
+downsampling without sharpening, using identical high-resolution input
+frames and a 3:1 reduction as observed here. The current single bilinear
+presentation sample does not average the full 3x3 source footprint.
+A correct spatial supersampling resolve is the next candidate; higher
+internal resolution alone is not accepted as completed SSAA. A dynamic
+sequence is still needed to judge shimmer; no TAA input contract has
+been established. The #335 general sampler controls remain a separate
+future replacement for this build-specific experiment.

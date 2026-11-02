@@ -86,6 +86,7 @@ DM_MOTION_HID	switch	On the Mac, `0` disables the passive Switch Pro Controller 
 DM_MOTION_LOG	diagnostic	`=1` logs player 1's mapped motion sample once a second per source (phone / GameController / controller HID; acceleration in G, gyro in revolutions/s), for checking the axes: flat and still reads acc 0 0 -1
 DM_MOVIE_TRACE	diagnostic	When set, the movie decoder logs every call with its thread and decoder (by default the first 12 calls, then every 2^k-th)
 DM_MSL_DIR	path	Parent folder of the shader libraries: NVN loads from `b-<chain version>/` beneath it, Vulkan from `vk/`, GL from `gl/`; the app and the Mac launcher set it
+DM_NFS_SAMPLER_QUALITY	switch	`1` (experimental, NFS 1.0.3 only) rewrites two guarded sampler-setting instructions for a -0.375 mip LOD bias and 8x anisotropic filtering. `0`/unset (default) leaves them untouched. Requires rebuilding the rewritten NSO; original bytes verified against a local retail NSO; in-game acceptance incomplete; may change visual quality, load, and stability. Prefer the general controls of PR #335 once merged.
 DM_NICK	switch	The account nickname the game sees (default `Player`)
 DM_NRO	switch	`0` turns off loading of the NRO modules the game's NRR files register (on by default): every `nn::ro::LoadModule` then fails
 DM_NVN_ALLOCPROF	diagnostic	`=1` charges Metal allocation growth to each replayed op type and function, and logs command allocator sizes and each new texture (serial, size, format, storage)
