@@ -11209,7 +11209,20 @@ void mtl_exec(const uint8_t *p) {
 }
 
 // ---------- Present: draw the swapchain texture to the CAMetalLayer; optional screenshot ----------
-static id<MTLRenderPipelineState> g_blit_pso; static MTLPixelFormat g_blit_fmt;
+static id<MTLRenderPipelineState> g_blit_pso, g_ssaa_pso; static MTLPixelFormat g_blit_fmt;
+// The original bilinear present is always the default; opt-in affects only
+// the final source-to-screen reduction and requires an app restart.
+static int present_ssaa_requested(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *e = getenv("DM_PRESENT_SSAA");
+        enabled = e && strcmp(e, "1") == 0;
+        if (e && *e && strcmp(e, "0") && strcmp(e, "1"))
+            MLOG("[RED] DM_PRESENT_SSAA=%s (expected 0 or 1); leaving bilinear present", e);
+        if (enabled) MLOG("DM_PRESENT_SSAA=1: experimental multi-tap final downsampling selected");
+    }
+    return enabled;
+}
 static id<MTLSamplerState> g_blit_samp;
 static uint64_t g_present_n;
 uint64_t mtl_present_count(void) { return g_present_n; }   // Actual present count (heat attribution DM_HEAT computes the present frame rate)
@@ -11559,6 +11572,20 @@ static void present_pipeline(MTLPixelFormat format) {
         pd.colorAttachments[0].pixelFormat = format;
         g_blit_pso = [g_dev newRenderPipelineStateWithDescriptor:pd error:&e];
         if (!g_blit_pso) MDIE("present pipeline failed %s", e.localizedDescription.UTF8String);
+        g_ssaa_pso = nil;
+        if (present_ssaa_requested()) {
+            // A separate fragment entry point preserves the unmodified bilinear
+            // pipeline for every disabled A/B run; both share the existing
+            // 8-float crop ABI and require no changes to render targets or NSP.
+            pd.fragmentFunction = [lib newFunctionWithName:@"fsaa"];
+            if (pd.fragmentFunction) {
+                NSError *ae = nil;
+                g_ssaa_pso = [g_dev newRenderPipelineStateWithDescriptor:pd error:&ae];
+                if (!g_ssaa_pso) MLOG("[RED] experimental SSAA pipeline creation failed: %s; using bilinear", ae.localizedDescription.UTF8String);
+            } else {
+                MLOG("[RED] experimental SSAA fragment not found; using bilinear");
+            }
+        }
         g_blit_fmt = format;
         MTLSamplerDescriptor *sd = [MTLSamplerDescriptor new]; sd.minFilter = sd.magFilter = MTLSamplerMinMagFilterLinear; sd.supportArgumentBuffers = YES;
         g_blit_samp = [g_dev newSamplerStateWithDescriptor:sd];
@@ -11619,7 +11646,7 @@ static int present_encode(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTex
     rp.colorAttachments[0].storeAction = MTLStoreActionStore;
     id<MTLRenderCommandEncoder> en = [cb renderCommandEncoderWithDescriptor:rp];
     [en setViewport:vp];
-    [en setRenderPipelineState:g_blit_pso]; [en setFragmentTexture:present_raw_src(src) atIndex:0]; [en setFragmentSamplerState:g_blit_samp atIndex:0];
+    [en setRenderPipelineState:(g_ssaa_pso ? g_ssaa_pso : g_blit_pso)]; [en setFragmentTexture:present_raw_src(src) atIndex:0]; [en setFragmentSamplerState:g_blit_samp atIndex:0];
     float uv[8] = {(float)cx / src.width, (float)cy / src.height, (float)cw / src.width, (float)ch / src.height,
                    (cx + 0.5f) / src.width, (cy + 0.5f) / src.height, (cx + cw - 0.5f) / src.width, (cy + ch - 0.5f) / src.height};
     if (atomic_load_explicit(&g_origin_ll, memory_order_relaxed)) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // lower-left origin: the window image is stored bottom-up
@@ -11721,7 +11748,7 @@ static int present_encode_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MT
     uv[4] = (cx + 0.5f) / tw; uv[5] = (cy + 0.5f) / th; uv[6] = (cx + cw - 0.5f) / tw; uv[7] = (cy + ch - 0.5f) / th;
     if (atomic_load_explicit(&g_origin_ll, memory_order_relaxed)) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // lower-left origin: the window image is stored bottom-up
     [g_present_args setAddress:uvb.gpuAddress atIndex:0];
-    [en setViewport:vp]; [en setRenderPipelineState:g_blit_pso];
+    [en setViewport:vp]; [en setRenderPipelineState:(g_ssaa_pso ? g_ssaa_pso : g_blit_pso)];
     [en drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
     m4_end(en);
     return up ? PRESENT_METALFX : PRESENT_STANDARD;
