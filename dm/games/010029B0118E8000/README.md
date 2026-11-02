@@ -221,14 +221,57 @@ perceptual quality, linear-light reconstruction or temporal AA. The old
 source sequence itself has screenshot/readback perturbation and cannot
 prove normal-cadence motion shimmer.
 
-Live game performance remains unaccepted. The first 2x/off launch reached
+The first live 2x/off launch reached
 the race and exited normally with the two known device-query messages,
 but all 1,800 presents in the 350-380 s window were discarded while the
 Mac screen was locked. Its nominal 60 fps is not a displayed-frame result.
-The harness rejected it and stopped before 2x/on. A fresh visible-window
-pair is required after the user unlocks the Mac. No six-cell game matrix,
-long driving/thermal trial or cross-game runtime regression is claimed.
-Only NFS is locally installed; the existing harness setup is incomplete.
+The harness rejected it and stopped before 2x/on. Its evidence is preserved.
+
+After the user unlocked the Mac, a fresh visible-window pair used the
+same frozen repair host (`b96918c7` source), stock-sampler modules, starting
+save copies, chain, 60 fps target, scale 1, 1280x720 output, audio on and
+MetalFX/HUD off. Temporary display-awake assertions ended with the run.
+One 389 s launch per toggle, off then on; the 350-380 s window contains
+no screenshots or dumps. Final screenshots are requested at 382/384/386 s,
+and the sampler dump after host time 387 s. All requests and completions
+are independently recorded. No timing row is removed.
+
+| SSAA | Frames | FPS | Frame P95 | Frame P99 | Frame max | Frame >25 ms | Main GPU P50/P95 | Discarded | Shown >25 ms | System GPU median % |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| off | 1799 | 60.0 | 21.10 | 21.24 | 32.08 | 1 | 7.13/7.35 | 0 | 0 | 61 (28 samples) |
+| on | 1800 | 60.0 | 21.05 | 21.17 | 22.16 | 0 | 7.41/7.78 | 0 | 1 | 66 (29 samples) |
+
+Times are milliseconds. Both remain visible, reach the race and exit 0,
+with exactly the two known device-query messages and no fallback report.
+The final pictures show zero speed, neutral gear, 8.4 miles and matching
+car/road landmarks. Geometry stays stable within each short sequence;
+race times, reflections and lighting differ between runs. These are
+approximately matching static views, not locked poses or identical input
+frames. The separate frozen-frame comparison above supplies that control.
+Original and starting saves remain unchanged by hash.
+
+The TSV's main GPU time excludes the separate final-present command buffer.
+One on bucket of 600 valid presentCB samples, observed near host
+369.32 +/-1 s, has GPU P50/P95/max 0.312/0.320/0.360 ms. Off monitoring
+started too late for a live timestamp; neighboring frame-numbered logs and
+TSV conservatively bracket one complete bucket inside the timing window
+(start 360.23-365.45 s, end 370.24-375.45 s), at 0.150/0.160/0.207 ms.
+This is a retrospective bracket, not a precise end timestamp. The feedback
+sampler skips nonpositive or >=1 s values. Do not add percentiles across
+the main and present queues, or infer a precise incremental GPU cost from
+this one ordered pair. System utilization includes desktop activity.
+
+This passes the initial 2x visible-window integrity/smoke gate, not a
+performance-improvement, motion-AA or long-term stability claim. The full
+six-cell game matrix, 8x-sampler-plus-SSAA combination, long driving/thermal
+trial, audible-audio checks and cross-game runtime regression remain open.
+Only NFS is locally installed; the existing regression harness setup is
+incomplete. Static impact names BotW, Scarlet and TotK as affected,
+Hades through a broad rule and 117 profiles unknown; it is not runtime proof.
+
+Keep the bounded resolve as the first reversible candidate. Integer 3:1
+already matches its area mean; investigate exact area sampling separately
+at fractional ratios before choosing whether its benefit justifies its cost.
 
 Original sampler, resolution, integrated, prototype and toggle branches,
 original saves and benchmark Draft PR #852 are preserved. Raw PNGs, logs,
