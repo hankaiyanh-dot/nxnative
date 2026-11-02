@@ -18,7 +18,13 @@ struct Crop { float4 rect; float4 edge; };
 // Limit to 4 taps per axis so a large source cannot cause unbounded GPU work.
 // TODO: compare source/viewport sizes and bilinear vs resolved imagery at
 // matching race positions on M6 before claiming any quality benefit.
+// The ordinary, single-bilinear present stays the default and is the A/B baseline.
 fragment float4 fs(V in [[stage_in]], texture2d<float> t [[texture(0)]], sampler s [[sampler(0)]], constant Crop& c [[buffer(0)]]) {
+  return t.sample(s, clamp(in.uv * c.rect.zw + c.rect.xy, c.edge.xy, c.edge.zw));
+}
+
+// Experimental multi-tap downsample: selected only through DM_PRESENT_SSAA=1.
+fragment float4 fsaa(V in [[stage_in]], texture2d<float> t [[texture(0)]], sampler s [[sampler(0)]], constant Crop& c [[buffer(0)]]) {
   float2 uv = in.uv * c.rect.zw + c.rect.xy;
   float2 edge_uv = clamp(uv, c.edge.xy, c.edge.zw);
   float2 size = float2(float(t.get_width()), float(t.get_height()));
