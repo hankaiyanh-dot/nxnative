@@ -118,3 +118,62 @@ attachments before `clear_only` / `g_geo_omit_colors` filters, potentially demot
 an unused scaled target. This was not demonstrated on NFS and is not patched here.
 Raw game files, shaders, saves, logs and screenshots stay local; only source,
 synthetic tests and this sanitized note belong in the fork.
+
+
+### Experimental final-present SSAA resolve, opt-in (fork-only, not M6 accepted)
+
+The independently developed `codex/nfs-ssaa-toggle-20261102` branch is
+derived from the *unmodified* earlier prototype `codex/nfs-ssaa-resolve-20261102`.
+It retains both shader entrypoints and selects them at **next launch**:
+
+| Launch environment | Fragment | Interpretation |
+|---|---|---|
+| `DM_PRESENT_SSAA=0` (or unset) | `fs` | **Original single-bilinear present**; control / rollback |
+| `DM_PRESENT_SSAA=1` | `fsaa` | Experimental bounded 1–4 taps per axis to average a shrinking image |
+| Any other value | `fs` | Invalid value warns, uses default |
+| `1` but pipeline build fails | `fs` | Logs a RED line and safely falls back |
+
+This is a **presentation-only** option, not an internal-resolution
+setting, full-screen FXAA/SMAA, temporal AA or HD texture replacement.
+Even at `DM_UPSCALE=1`, the game's picture may be larger than a 1280-wide
+window and the experimental shader can change its final appearance.
+For a controlled factorial comparison, use `DM_UPSCALE=1,1.5,2` separately
+from `DM_PRESENT_SSAA=0,1`; keep `DM_PRESENT_UPSCALE=off`, the window
+drawable size, driver, chain, starting save, input route, 60 Hz pacing,
+`DM_RENDER_SCALE=1` and the host binary fixed. Record exactly which
+setting was used for **each run**. Screenshots, GPU capture or shader dumps
+must be *outside* the frame-time measurement window.
+
+The initial CPU sample-grid tests and earlier MSL compile of the pre-toggle
+prototype do **not** certify this branch's new host pipeline or game output.
+The host M4 and legacy present paths now both choose the same optional
+pipeline and fall back to `fs`; the shader's original eight-float crop
+buffer ABI is unchanged. Before recommending this to anyone, on the M6:
+
+1. Compile `present.metal` with the locked Metal compiler and rebuild
+   the Mac host. Run `python3 -m unittest dm.tools.tests.test_nfs_present_ssaa`
+   (or the repository's documented test entrypoint) after checkout.
+2. Check logs for experimental shader compilation or pipeline creation
+   errors; verify `DM_PRESENT_SSAA=0` uses the unmodified baseline.
+3. Validate the legacy and Metal 4 presentation paths where available,
+   including offscreen screenshot output, window resize, crop, orientation
+   and 1x/1.5x/2x input and destination sizes.
+4. Compare **matched** on-track and static-scene image captures, checking
+   thin rails, car contours, foliage, moving shimmer, HUD and text.
+5. Record repeated capture-free 540–600 s windows for FPS, P95/P99,
+   >25 ms frames, per-frame GPU times and memory; report route drift
+   and audio/visibility issues. Do not infer improvements from unmatched
+   one-run results.
+
+The bounded multi-tap grid is an exploratory **box-like approximation**.
+The [Ryujinx area scaling algorithm](https://github.com/Ryojinx/Ryojinx/blob/main/src/Ryujinx.Graphics.Vulkan/Effects/Shaders/AreaScaling.glsl)
+is a reference for *fractional pixel coverage*, not code integrated here.
+At 1.5x or noninteger present ratios the tap grid is not an exact
+area-weighted integrator. Higher ratios above four source texels per
+output pixel are capped to 4x4 taps. If these limitations are visible
+on M6, compare an independently implemented weighted filter before
+proposing an upstream change.
+
+**Never present this source-only switch as an M6-tested AA improvement.**
+The first-stage sampler branch and the draft benchmark PR #852 remain
+separate and untouched.
